@@ -1,0 +1,12 @@
+# Windows system files
+desktop.ini
+
+# Python virtual environments and caches
+venv/
+__pycache__/
+*.pyc
+
+# Application temporary data
+output/
+final/
+temp/

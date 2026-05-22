@@ -1,0 +1,54 @@
+VIDEO PROCESSING WEB SERVER - USER MANUAL
+
+1. INTRODUCTION
+This application is a local, web-based video processing pipeline designed to automate tasks such as audio/subtitle extraction, video upscaling, and subtitle burning. It utilizes advanced machine learning models via PyTorch and Whisper, and provides a graphical web interface built on Flask and Bootstrap to monitor real-time progress.
+
+2. PREREQUISITES
+Before installing and running the application, ensure your system meets the following requirements:
+- Operating System: Windows (due to the provided .bat execution script).
+- Python: Python 3.8 or higher must be installed and added to your system PATH.
+- FFmpeg: FFmpeg must be installed and added to your system PATH (required for ffprobe and media processing).
+- Hardware: A CUDA-compatible NVIDIA GPU is highly recommended for PyTorch/Whisper acceleration, though CPU processing is supported as a fallback.
+
+3. INSTALLATION AND INITIALIZATION
+The application is designed for a one-click automated setup process via the provided batch script.
+- Locate the "run_app.bat" file in the application directory.
+- Double-click "run_app.bat".
+- The script will automatically:
+  a. Create an isolated Python virtual environment (venv) in the directory.
+  b. Activate the virtual environment.
+  c. Install all required dependencies, including Flask, Waitress, PyTorch (CUDA 12.1 variant), and OpenAI-Whisper.
+  d. Launch the Flask web server using Waitress.
+  e. Open your default web browser to the application's local address.
+
+Note: The first launch will take longer as it downloads large dependencies (like PyTorch). Keep the command prompt window open while using the application.
+
+4. USING THE APPLICATION
+Once the web interface loads in your browser, you can configure your processing job using the available settings.
+
+4.1. Input and Output Selection
+- Input Path: Provide the path to the video file(s) or directory you wish to process.
+- Output Destination: Choose whether to save the processed files in the same directory as the input ("Same as Input") or specify a custom "Output Folder".
+
+4.2. Processing Workflows (Tabs)
+The application categorizes operations into three primary starting points. If you enable the "Automate" toggle, the pipeline will chain subsequent tasks automatically.
+- Tab 1 (Extract): Starts by extracting audio/subtitles using Whisper. If "Automate" is checked, it will proceed to Upscale and then Burn.
+- Tab 2 (Upscale): Starts by upscaling the media. If "Automate" is checked, it will proceed to Burn.
+- Tab 3 (Burn): Burns subtitles directly into the video file.
+
+4.3. Hardware Allocation
+You can distribute processing tasks across available hardware to optimize performance:
+- GPU 0: Utilizes the primary NVIDIA GPU (cuda:0).
+- GPU 1: Utilizes a secondary NVIDIA GPU (cuda:1) if available.
+- CPU: Utilizes system processors. If no GPU is selected or available, the system defaults to CPU.
+
+4.4. SRT Time Mathematical Adjustment
+The application includes a built-in engine to adjust SRT (subtitle) timings based on speed modifications, ensuring subtitles remain perfectly synced with altered video or audio tracks.
+
+5. MONITORING AND CANCELLATION
+- Real-Time Tracking: The web interface features a dynamic progress bar, completion percentage, and an Estimated Time of Arrival (ETA) calculator.
+- System Logs: The integrated log box provides real-time terminal output, detailing current operations, device delegation, and any potential errors.
+- Cancellation: If you need to stop a job prematurely, click the "Cancel Process" button. The server will intercept the command, terminate the background threads, and safely halt processing without crashing the interface.
+
+6. SHUTTING DOWN
+To stop the application, return to the command prompt window running the batch script and press Ctrl+C, then confirm termination. You may then close your web browser tab.

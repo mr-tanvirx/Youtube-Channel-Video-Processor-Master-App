@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <title>Video Processing Pipeline</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .log-box { height: 200px; overflow-y: scroll; font-family: monospace; padding: 10px; font-size: 0.9em; border-radius: 5px; }
+        [data-bs-theme="dark"] .log-box { background: #1a1d20; color: #00ff00; border: 1px solid #495057; }
+        [data-bs-theme="light"] .log-box { background: #f8f9fa; color: #212529; border: 1px solid #dee2e6; }
+        .progress-wrapper { position: relative; height: 30px; background-color: var(--bs-secondary-bg); border-radius: 5px; overflow: hidden; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #0d6efd, #0dcaf0); width: 0%; transition: width 0.4s ease; }
+        .progress-text { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-weight: bold; mix-blend-mode: difference; color: white; }
+        .eta-text { font-size: 0.9em; font-weight: bold; color: var(--bs-secondary-color); }
+        .dimmed { opacity: 0.5; pointer-events: none; }
+        .theme-btn { border-radius: 20px; font-weight: bold; }
+    </style>
+</head>
+<body class="container py-4">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Video Processing Pipeline</h2>
+        <div>
+            <button id="cancelBtn" class="btn btn-danger d-none me-2" onclick="cancelProcess()">Cancel Process</button>
+            <button class="btn btn-outline-secondary theme-btn" onclick="toggleTheme()">☀️ / 🌙</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">Global Routing & Hardware</div>
+        <div class="card-body">
+            <div class="row mb-3">
+                <div class="col-md-6 border-end">
+                    <label class="form-label fw-bold">Input Selection:</label>
+                    <div class="mb-2">
+                        <input type="radio" name="inputType" id="typeFolder" value="folder" class="form-check-input config-input" checked onchange="toggleInputs()"> <label class="me-3">Folder Batch</label>
+                        <input type="radio" name="inputType" id="typeFile" value="file" class="form-check-input config-input" onchange="toggleInputs()"> <label>Single File</label>
+                    </div>
+                    
+                    <div id="inputFolderGroup">
+                        <div class="input-group">
+                            <input type="text" id="inputFolder" class="form-control config-input" placeholder="Path to video folder...">
+                            <button class="btn btn-outline-secondary config-input" type="button" onclick="browseNative('folder', 'inputFolder')">Browse</button>
+                        </div>
+                    </div>
+                    
+                    <div id="inputFileGroup" class="d-none">
+                        <div class="input-group">
+                            <input type="text" id="inputFile" class="form-control config-input" placeholder="Select a single video file...">
+                            <button class="btn btn-outline-secondary config-input" type="button" onclick="browseNative('file', 'inputFile')">Browse</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Output Selection:</label>
+                    <div class="mb-2 form-check">
+                        <input type="checkbox" id="sameAsInput" class="form-check-input config-input" onchange="toggleInputs()">
+                        <label class="form-check-label">Output to same directory as input</label>
+                    </div>
+                    
+                    <div id="outputFolderGroup">
+                        <div class="input-group">
+                            <input type="text" id="outputFolder" class="form-control config-input" placeholder="Path to output folder...">
+                            <button class="btn btn-outline-secondary config-input" type="button" onclick="browseNative('folder', 'outputFolder')">Browse</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row border-top pt-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-bold">Hardware Delegation:</label>
+                    <div>
+                        <input type="checkbox" id="gpu0" class="config-input form-check-input" checked> <label class="form-check-label me-2">GPU 0</label>
+                        <input type="checkbox" id="gpu1" class="config-input form-check-input" checked> <label class="form-check-label me-2">GPU 1</label>
+                        <input type="checkbox" id="cpu" class="config-input form-check-input"> <label class="form-check-label">CPU (Threads)</label>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-bold" id="autoLabelText">Sequential Automation (Will process: Extract ➔ Upscale ➔ Burn)</label>
+                    <div class="form-check form-switch mt-1">
+                        <input class="form-check-input config-input" type="checkbox" id="automate" checked onchange="updateDynamicLabels()">
+                        <label class="form-check-label text-info">Enable chaining logic</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <ul class="nav nav-tabs" id="pipelineTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab1-btn" data-bs-toggle="tab" data-bs-target="#tab1" type="button" role="tab">1. Subtitle Extract</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab2-btn" data-bs-toggle="tab" data-bs-target="#tab2" type="button" role="tab">2. Processing & Upscale</button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab3-btn" data-bs-toggle="tab" data-bs-target="#tab3" type="button" role="tab">3. Burn Subtitle</button>
+        </li>
+    </ul>
+
+    <div class="tab-content border border-top-0 p-4 mb-4 rounded-bottom" id="mainTabs">
+        <div class="tab-pane fade show active" id="tab1" role="tabpanel">
+            <div class="row">
+                <div class="col-md-12 mb-3">
+                    <label class="form-label">Subtitle Action:</label>
+                    <select id="extractTask" class="form-select config-input border-primary">
+                        <option value="transcribe" selected>Transcribe (Keep Original Language)</option>
+                        <option value="translate">Translate to English</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Source Language:</label>
+                    <select id="language" class="form-select config-input">
+                        <option value="auto">Auto-Detect</option>
+                        <option value="en">English</option>
+                        <option value="bn">Bangla</option>
+                        <option value="hi">Hindi</option>
+                    </select>
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label class="form-label">Model Size:</label>
+                    <select id="model" class="form-select config-input">
+                        <option value="small">Small</option>
+                        <option value="medium">Medium</option>
+                        <option value="large" selected>Large (Best for Regional)</option>
+                    </select>
+                </div>
+            </div>
+            <button class="btn btn-primary action-btn w-100" id="btn1" onclick="startProcess(1)">Process Task 1, 2 and 3</button>
+        </div>
+
+        <div class="tab-pane fade" id="tab2" role="tabpanel">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Speed Multiplier (0.1x - 3.0x):</label>
+                    <input type="number" id="speed" class="form-control config-input" value="1.0" min="0.1" max="3.0" step="0.1">
+                    
+                    <div class="form-check mt-3">
+                        <input class="form-check-input config-input" type="checkbox" id="speedOnly" onchange="toggleSpeedOnly()">
+                        <label class="form-check-label fw-bold text-danger">Only change speed (Disable 4K & Logo)</label>
+                    </div>
+                </div>
+                <div class="col-md-8 mb-3 p-3 bg-secondary bg-opacity-10 border rounded" id="tab2Filters">
+                    <strong>Standard Filters Applied:</strong>
+                    <ul class="mb-0 text-muted" style="font-size: 0.9em;">
+                        <li>Upscale 3840x2160 (Lanczos)</li>
+                        <li>Pre-scale unsharp filter (5:5:1.5:5:5:0.8)</li>
+                        <li>Overlay banner.png (Scale: 0.43, Padding: R 120, B -50)</li>
+                        <li>Trim final 2.5 seconds.</li>
+                    </ul>
+                </div>
+            </div>
+            <button class="btn btn-primary action-btn w-100" id="btn2" onclick="startProcess(2)">Process Task 2 and 3</button>
+        </div>
+
+        <div class="tab-pane fade" id="tab3" role="tabpanel">
+            <div class="col-md-4 mb-3">
+                <label class="form-label">Font Size:</label>
+                <input type="number" id="fontSize" class="form-control config-input" value="18">
+            </div>
+            <p class="text-muted" style="font-size: 0.9em;">Style locked to Pure White, Transparent Backing, Precise Border.</p>
+            <button class="btn btn-primary action-btn w-100" id="btn3" onclick="startProcess(3)">Process Task 3</button>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-end mb-2">
+                <h5 class="mb-0">Status: <span id="statusLabel" class="text-primary">Idle</span></h5>
+                <span class="eta-text">ETA: <span id="etaLabel">--:--</span></span>
+            </div>
+            
+            <div class="progress-wrapper mb-3">
+                <div id="progressBar" class="progress-fill"></div>
+                <div id="progressText" class="progress-text">0%</div>
+            </div>
+            
+            <div class="log-box" id="logBox"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleTheme() {
+            const htmlTag = document.documentElement;
+            htmlTag.setAttribute('data-bs-theme', htmlTag.getAttribute('data-bs-theme') === 'dark' ? 'light' : 'dark');
+        }
+
+        function browseNative(type, targetInputId) {
+            fetch(`/browse?type=${type}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.path) {
+                        document.getElementById(targetInputId).value = data.path;
+                    }
+                });
+        }
+
+        function toggleInputs() {
+            const isFolder = document.getElementById('typeFolder').checked;
+            document.getElementById('inputFolderGroup').classList.toggle('d-none', !isFolder);
+            document.getElementById('inputFileGroup').classList.toggle('d-none', isFolder);
+
+            const isSameAsInput = document.getElementById('sameAsInput').checked;
+            document.getElementById('outputFolderGroup').classList.toggle('d-none', isSameAsInput);
+        }
+
+        function updateDynamicLabels() {
+            const isAuto = document.getElementById("automate").checked;
+            const activeTabPane = document.querySelector('.tab-pane.active');
+            const activeTabId = activeTabPane ? activeTabPane.id : 'tab1';
+            
+            const label = document.getElementById("autoLabelText");
+            
+            if (!isAuto) {
+                label.innerText = "Sequential Automation (Off)";
+                document.getElementById("btn1").innerText = "Process Task 1";
+                document.getElementById("btn2").innerText = "Process Task 2";
+                document.getElementById("btn3").innerText = "Process Task 3";
+                return;
+            }
+
+            if (activeTabId === 'tab1') {
+                label.innerText = "Sequential Automation (Will process: Extract ➔ Upscale ➔ Burn)";
+            } else if (activeTabId === 'tab2') {
+                label.innerText = "Sequential Automation (Will process: Upscale ➔ Burn)";
+            } else {
+                label.innerText = "Sequential Automation (Will process: Burn only)";
+            }
+
+            document.getElementById("btn1").innerText = "Process Task 1, 2 and 3";
+            document.getElementById("btn2").innerText = "Process Task 2 and 3";
+            document.getElementById("btn3").innerText = "Process Task 3";
+        }
+
+        document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(tab => {
+            tab.addEventListener('shown.bs.tab', event => {
+                updateDynamicLabels();
+            });
+        });
+
+        function toggleSpeedOnly() {
+            const isSpeedOnly = document.getElementById("speedOnly").checked;
+            const filtersBox = document.getElementById("tab2Filters");
+            if (isSpeedOnly) {
+                filtersBox.classList.add("dimmed");
+            } else {
+                filtersBox.classList.remove("dimmed");
+            }
+        }
+
+        function toggleUIState(isProcessing) {
+            const inputs = document.querySelectorAll('.config-input, .action-btn, button[data-bs-toggle="tab"]');
+            inputs.forEach(el => el.disabled = isProcessing);
+            
+            const cancelBtn = document.getElementById('cancelBtn');
+            if (isProcessing) {
+                cancelBtn.classList.remove('d-none');
+            } else {
+                cancelBtn.classList.add('d-none');
+            }
+        }
+
+        function startProcess(tabId) {
+            const isFolder = document.getElementById('typeFolder').checked;
+            const isSameAsInput = document.getElementById('sameAsInput').checked;
+            
+            const inputFolder = document.getElementById('inputFolder').value;
+            const inputFile = document.getElementById('inputFile').value;
+            const outputFolder = document.getElementById('outputFolder').value;
+
+            if (isFolder && !inputFolder) return alert("Please specify an input folder path.");
+            if (!isFolder && !inputFile) return alert("Please specify an input file path.");
+            if (!isSameAsInput && !outputFolder) return alert("Please specify an output folder path, or check 'Output to same directory as input'.");
+
+            const payload = {
+                inputType: isFolder ? 'folder' : 'file',
+                inputFolder: inputFolder,
+                inputFile: inputFile,
+                sameAsInput: isSameAsInput,
+                outputFolder: outputFolder,
+                
+                gpu0: document.getElementById('gpu0').checked,
+                gpu1: document.getElementById('gpu1').checked,
+                cpu: document.getElementById('cpu').checked,
+                automate: document.getElementById('automate').checked,
+                startTab: tabId,
+                extractTask: document.getElementById('extractTask').value,
+                language: document.getElementById('language').value,
+                model: document.getElementById('model').value,
+                speed: parseFloat(document.getElementById('speed').value),
+                speedOnly: document.getElementById('speedOnly').checked,
+                fontSize: parseInt(document.getElementById('fontSize').value)
+            };
+
+            fetch('/start', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }).then(res => res.json()).then(data => {
+                if(data.error) {
+                    alert(data.error);
+                } else {
+                    toggleUIState(true);
+                    pollStatus();
+                }
+            });
+        }
+
+        function cancelProcess() {
+            fetch('/cancel', { method: 'POST' }).then(res => res.json()).then(data => {
+                document.getElementById('cancelBtn').innerText = "Cancelling...";
+                document.getElementById('cancelBtn').disabled = true;
+            });
+        }
+
+        let pollInterval;
+        function pollStatus() {
+            if(pollInterval) clearInterval(pollInterval);
+            pollInterval = setInterval(() => {
+                fetch('/status').then(res => res.json()).then(data => {
+                    const statusLabel = document.getElementById('statusLabel');
+                    statusLabel.innerText = data.status;
+                    
+                    if (data.status === 'Error' || data.status === 'Cancelled') {
+                        statusLabel.className = 'text-danger fw-bold';
+                    } else if (data.status === 'Completed') {
+                        statusLabel.className = 'text-success fw-bold';
+                    } else {
+                        statusLabel.className = 'text-primary fw-bold';
+                    }
+
+                    document.getElementById('progressBar').style.width = data.progress + '%';
+                    document.getElementById('progressText').innerText = data.progress + '%';
+                    document.getElementById('etaLabel').innerText = data.eta;
+                    
+                    const logBox = document.getElementById('logBox');
+                    logBox.innerHTML = data.logs.join('<br>');
+                    logBox.scrollTop = logBox.scrollHeight;
+
+                    if(data.status === 'Completed' || data.status === 'Error' || data.status === 'Cancelled') {
+                        clearInterval(pollInterval);
+                        toggleUIState(false);
+                        const cancelBtn = document.getElementById('cancelBtn');
+                        cancelBtn.innerText = "Cancel Process";
+                        cancelBtn.disabled = false;
+                    }
+                });
+            }, 1000);
+        }
+    </script>
+</body>
+</html>
