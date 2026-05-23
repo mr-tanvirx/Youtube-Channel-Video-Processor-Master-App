@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="banner.jpg" alt="Project Banner" width="100%">
+  
 
   # Video Processing Pipeline Web Server
   
